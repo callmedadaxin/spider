@@ -1,70 +1,26 @@
-var _ = require('lodash')
-var request = require('request')
-var parser = require('./parser')
-var iconv = require('iconv-lite')
-var cheerio = require('cheerio')
-var async = require('async')
-var moment = require('moment')
+var fs = require('fs');
+var spider = require('./spider.js');
+var path = require('path');
 
-function fetchData(opts) {
-  if (_.isString(opts)) {
-    opts = {
-      url: opts
-    }
-  }
+// var total = 10,
+//   proxys = [];
 
-  opts.encoding = null
+// function fetchProxy(page = 1, total) {
+//   return spider.fetchProxy(page).then(r => {
+//     console.log('fifish fetch page: ' + page);
 
-  return new Promise((resolve, reject) => {
-    opts.callback = function(error, response, body) {
-      if (!error) {
-        body = iconv.decode(body, opts.decoding || 'utf8')
-          // 处理json
-        try {
-          body = JSON.parse(body)
-        } catch (e) {}
+//     proxys = proxys.concat(r);
 
-        var $ = loadHtml(body);
-        resolve($)
-      } else {
-        reject(error)
-      }
-    }
-    request(opts)
-  })
-}
+//     if (page < total) {
+//       return fetchProxy(++page, total);
+//     } else {
+//       return proxys
+//     }
+//   })
+// }
 
-function loadHtml(data) {
-  return cheerio.load(data, {
-    decodeEntities: false
-  })
-}
-
-//延时抓取
-function asyncGetData(urls, proccessData = data => data, limit = 3, timestep = 2000) {
-  var results = [];
-
-  return new Promise((resolve, reject) => {
-    async.eachLimit(urls, limit, (url, callback) => {
-      fetchData({
-        url,
-        decoding: 'gb2312'
-      }).then($ => {
-        results.push(proccessData($));
-
-        //打印信息
-        var time = moment().format('HH:MM:ss');
-        console.log(`${url}===>success, ${time}`)
-
-        setTimeout(callback, timestep);
-      })
-    }, _ => {
-      resolve(results);
-    })
-  })
-}
-
-fetchData({
+// spider.fetchProxy().then(proxys => {
+spider.fetchData({
   url: 'http://www.dytt8.net/index.htm',
   decoding: 'gb2312'
 }).then($ => {
@@ -75,23 +31,44 @@ fetchData({
     hrefList.push('http://www.dytt8.net' + $(el).attr('href'));
   });
 
-  hrefList.length = 5;
+  hrefList = hrefList.filter(item => item.url !== '');
+
+  hrefList.length = 50;
 
   return hrefList;
 }).then(list => {
-  return asyncGetData(list, $ => {
-    var result = [];
+  // var proxyIndex = parseInt(Math.random() * proxys.length) || 0;
 
-    var title = $('.title_all h1').text(),
-      url = $('#Zoom table td a').text();
+  // var proxy = proxys[proxyIndex];
+  var proxy = {
+    ip: '124.207.82.166',
+    port: '8008',
+    name: '北京市  鹏博士宽带'
+  };
 
-    result.push({
+  proxy = `http://${proxy.ip}:${proxy.port}`;
+
+  return spider.asyncGetData({
+    urls: list,
+    decoding: 'gb2312',
+    proxy: proxy
+  }, $ => {
+    var title = $('.title_all h1 font').html(),
+      url = $('#Zoom table td a').html();
+
+    return {
       title: title,
       url: url
-    })
-
-    return result;
+    };
   });
 }).then(r => {
-  console.log(r);
+  console.log('finish');
+  fs.writeFile(path.join(__dirname, './film.json'), JSON.stringify(r), r => {
+    console.log('写入完成');
+  });
+}).catch(e => {
+  console.log(e);
+  console.log('出错啦');
 })
+
+// })
